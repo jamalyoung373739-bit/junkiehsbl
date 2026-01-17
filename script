@@ -1,0 +1,212 @@
+-- [[ PHARMACII LITE V104 - DUNK-SAFE & ROOT-ANCHORED ]] --
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- [[ SETTINGS ]] --
+local Settings = {
+    FlightTime = 0.9,       -- V104 Original Math
+    Gravity = 196.2,
+    ServerBoost = 50,
+    StepSize = 5,
+    AutoShoot = true,
+    DunkDistance = 15,      -- Script won't fire if you are closer than 15 studs
+    
+    -- VISUALS
+    LineColor = Color3.fromRGB(80, 255, 120),
+    LineWidth = 0.3,
+    ArcHeight = 2.2,
+}
+
+-- [[ UI - ANTI-VIEW PROTECTION ]] --
+local PlrGui = LocalPlayer:WaitForChild("PlayerGui")
+if PlrGui:FindFirstChild("PharmaciiLite") then PlrGui.PharmaciiLite:Destroy() end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "PharmaciiLite"
+ScreenGui.DisplayOrder = 999999
+
+if gethui then
+    ScreenGui.Parent = gethui()
+elseif syn and syn.protect_gui then
+    syn.protect_gui(ScreenGui)
+    ScreenGui.Parent = PlrGui
+else
+    ScreenGui.Parent = PlrGui
+end
+
+local Main = Instance.new("Frame", ScreenGui)
+Main.Size = UDim2.new(0, 200, 0, 60)
+Main.Position = UDim2.new(0.02, 0, 0.85, 0)
+Main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+Main.BackgroundTransparency = 0.1
+Instance.new("UICorner", Main)
+
+local Status = Instance.new("TextLabel", Main)
+Status.Text = "V104 DUNK-SAFE"
+Status.Size = UDim2.new(1, 0, 0.5, 0)
+Status.BackgroundTransparency = 1
+Status.TextColor3 = Color3.fromRGB(100, 255, 150)
+Status.Font = Enum.Font.GothamBlack
+Status.TextSize = 12
+
+local DebugLbl = Instance.new("TextLabel", Main)
+DebugLbl.Text = "Beam: Anchored | Anti-View: ON"
+DebugLbl.Size = UDim2.new(1, 0, 0.5, 0)
+DebugLbl.Position = UDim2.new(0, 0, 0.5, 0)
+DebugLbl.BackgroundTransparency = 1
+DebugLbl.TextColor3 = Color3.fromRGB(150, 150, 150)
+DebugLbl.Font = Enum.Font.Code
+DebugLbl.TextSize = 10
+
+-- [[ VISUALIZER (ROOT ANCHORED) ]] --
+local Terrain = Workspace.Terrain
+local Att0 = Instance.new("Attachment") -- Will be parented to Root
+local Att1 = Instance.new("Attachment", Terrain)
+local Beam = Instance.new("Beam", Terrain)
+Beam.Attachment0 = Att0
+Beam.Attachment1 = Att1
+Beam.Color = ColorSequence.new(Settings.LineColor)
+Beam.Width0 = Settings.LineWidth
+Beam.Width1 = Settings.LineWidth
+Beam.Segments = 40
+Beam.Transparency = NumberSequence.new(0.2)
+Beam.Enabled = false
+
+-- [[ HOOP FINDER ]] --
+local CachedHoop = nil
+local LastScanTime = 0
+
+local function GetClosestHoop()
+    if tick() - LastScanTime < 1 and CachedHoop then return CachedHoop end
+    LastScanTime = tick()
+    local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root then return nil end
+    local closest, minDist = nil, math.huge
+    for _, v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("BasePart") and (v.Name == "Goal" or v.Name == "Rim" or v.Name == "Hoop" or v.Name == "Net") then
+            local dist = (root.Position - v.Position).Magnitude
+            if dist < minDist and dist < 160 then
+                minDist = dist
+                closest = v
+            end
+        end
+    end
+    CachedHoop = closest
+    return closest
+end
+
+-- [[ V104 MATH ]] --
+local function SolveSnapped(hoop, char)
+    local head = char:FindFirstChild("Head")
+    local root = char:FindFirstChild("HumanoidRootPart")
+    if not head or not root then return nil, nil, nil end
+    
+    local g = Settings.Gravity
+    local t = Settings.FlightTime
+    local target = hoop.CFrame.Position
+    local dir = (target - head.Position).Unit
+    local spawnPos = root.Position + (dir * 5)
+    local disp = target - spawnPos
+    local neededVel = (disp - Vector3.new(0, -0.5*g*t*t, 0)) / t
+    local rawVec = neededVel - Vector3.new(0, Settings.ServerBoost, 0)
+    
+    local rawPwr = rawVec.Magnitude
+    local snappedPwr = math.floor((rawPwr / Settings.StepSize) + 0.5) * Settings.StepSize
+    snappedPwr = math.clamp(snappedPwr, 10, 100)
+    
+    local bestT = t
+    local bestErr = math.huge
+    for testT = 0.7, 1.3, 0.05 do
+        local d = target - spawnPos
+        local v = (d - Vector3.new(0, -0.5*g*testT*testT, 0)) / testT
+        local p = (v - Vector3.new(0, Settings.ServerBoost, 0)).Magnitude
+        local err = math.abs(p - snappedPwr)
+        if err < bestErr then bestErr = err; bestT = testT end
+    end
+    
+    local finalV = (target - spawnPos - Vector3.new(0, -0.5*g*bestT*bestT, 0)) / bestT
+    local finalDir = (finalV - Vector3.new(0, Settings.ServerBoost, 0)).Unit
+    local aimPos = head.Position + (finalDir * 100)
+    
+    return aimPos, snappedPwr, root
+end
+
+-- [[ POWER LOCKER ]] --
+local LockedPower = nil
+RunService.Stepped:Connect(function()
+    if LockedPower then
+        local char = LocalPlayer.Character
+        local tool = char and char:FindFirstChildOfClass("Tool")
+        local pVal = tool and tool:FindFirstChild("PowerValue")
+        if pVal then pVal.Value = LockedPower end
+    end
+end)
+
+-- [[ MAIN LOOP ]] --
+RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not char or not root then return end
+    
+    local hoop = GetClosestHoop()
+    if not hoop then
+        Beam.Enabled = false
+        Status.Text = "IDLE"
+        return 
+    end
+    
+    local distToHoop = (root.Position - hoop.Position).Magnitude
+    local aimPos, snapPwr, characterRoot = SolveSnapped(hoop, char)
+    
+    if aimPos then
+        -- Dunk Check: If too close, disable visuals and shooting
+        if distToHoop < Settings.DunkDistance then
+            Beam.Enabled = false
+            Status.Text = "DUNK RANGE"
+            return
+        end
+
+        Status.Text = "READY | PWR: " .. snapPwr
+        
+        -- VISUALS: Anchor to Body
+        Beam.Enabled = true
+        Att0.Parent = characterRoot
+        Att0.Position = Vector3.new(0, 0, 0)
+        Att1.WorldPosition = hoop.CFrame.Position
+        
+        Att0.WorldAxis = Vector3.new(0, 1, 0)
+        Att1.WorldAxis = Vector3.new(0, -1, 0)
+        
+        local dist = (characterRoot.Position - hoop.CFrame.Position).Magnitude
+        local curve = dist / Settings.ArcHeight
+        Beam.CurveSize0 = curve
+        Beam.CurveSize1 = curve
+        
+        -- AUTO SHOOT
+        if Settings.AutoShoot then
+            local hum = char:FindFirstChild("Humanoid")
+            if hum and hum:GetState() == Enum.HumanoidStateType.Jumping and not _G.ShotCooldown then
+                local tool = char:FindFirstChildOfClass("Tool")
+                if tool and tool:FindFirstChild("ShootEvent") then
+                    _G.ShotCooldown = true
+                    task.delay(0.5, function() 
+                        _G.ShotCooldown = false 
+                        LockedPower = nil 
+                    end)
+                    
+                    local animFolder = tool:FindFirstChild("Animations")
+                    local shootAnim = animFolder and animFolder:FindFirstChild("Shoot")
+                    if shootAnim then
+                        hum:LoadAnimation(shootAnim):Play()
+                    end
+                    
+                    LockedPower = snapPwr
+                    tool.ShootEvent:FireServer(hum, aimPos)
+                end
+            end
+        end
+    end
+end)
