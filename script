@@ -1,4 +1,4 @@
--- [[ PHARMACII.GG V144 - UI POLISH & ZERO-LAG ]] --
+-- [[ PHARMACII.GG V153 - STABILITY FIXED ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -32,8 +32,15 @@ local Settings = {
     AutoShoot = true,
     JumpDelay = 0.08,
     
-    -- Visuals/Misc
+    -- Visuals
     ShowHitboxes = false,
+    HBESize = 2,
+    HBEEnabled = false,
+    HBEVisuals = false,
+    AntiKnock = false,
+    BigHead = false,
+    TruckEnabled = false,
+    
     WorldTime = 12,
     Brightness = 2,
     MenuKey = Enum.KeyCode.LeftControl, 
@@ -44,7 +51,7 @@ local Settings = {
     AccentColor = Color3.fromRGB(180, 80, 255),  
     Gradient1 = Color3.fromRGB(140, 40, 220),
     Gradient2 = Color3.fromRGB(200, 100, 255),
-    TextColorDim = Color3.fromRGB(255, 255, 255), -- CHANGED: White text for headers
+    TextColorDim = Color3.fromRGB(255, 255, 255),
     ButtonColor = Color3.fromRGB(25, 25, 28)
 }
 
@@ -229,7 +236,7 @@ local function CreateLabel(parent, text)
     Label.Text = text
     Label.Size = UDim2.new(1, 0, 0, 20)
     Label.BackgroundTransparency = 1
-    Label.TextColor3 = Settings.TextColorDim -- Using the new White color
+    Label.TextColor3 = Settings.TextColorDim 
     Label.Font = Enum.Font.GothamBold
     Label.TextSize = 12
     Label.TextXAlignment = Enum.TextXAlignment.Left
@@ -368,10 +375,10 @@ local function CreateKeybind(parent, settingName, labelText, callback)
     Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 10)
     
     local Label = Instance.new("TextLabel", Container)
-    Label.Text = labelText or "Keybind" -- UPDATED: Custom label text
+    Label.Text = labelText or "Keybind"
     Label.Size = UDim2.new(0.5, 0, 1, 0)
     Label.Position = UDim2.new(0, 12, 0, 0)
-    Label.TextColor3 = Color3.fromRGB(200, 200, 200)
+    Label.TextColor3 = Settings.TextColorDim
     Label.Font = Enum.Font.GothamMedium
     Label.TextSize = 13
     Label.TextXAlignment = Enum.TextXAlignment.Left
@@ -423,12 +430,11 @@ local function CreateButton(parent, text, callback)
     end)
 end
 
--- NEW: Dropdown Component
 local function CreateDropdown(parent, placeholder, refreshFunc)
     local Container = Instance.new("Frame", parent)
     Container.Size = UDim2.new(1, 0, 0, 36)
     Container.BackgroundColor3 = Settings.ContainerColor
-    Container.ZIndex = 2
+    Container.ZIndex = 5 -- FIX: Raised ZIndex to float over other buttons
     Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 10)
     
     local MainBtn = Instance.new("TextButton", Container)
@@ -438,7 +444,7 @@ local function CreateDropdown(parent, placeholder, refreshFunc)
     MainBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
     MainBtn.Font = Enum.Font.GothamBold
     MainBtn.TextSize = 12
-    MainBtn.ZIndex = 3
+    MainBtn.ZIndex = 6
     
     local Arrow = Instance.new("TextLabel", Container)
     Arrow.Text = "v"
@@ -448,7 +454,7 @@ local function CreateDropdown(parent, placeholder, refreshFunc)
     Arrow.TextColor3 = Settings.AccentColor
     Arrow.Font = Enum.Font.GothamBold
     Arrow.TextSize = 12
-    Arrow.ZIndex = 3
+    Arrow.ZIndex = 6
     
     local List = Instance.new("ScrollingFrame", Container)
     List.Size = UDim2.new(1, 0, 0, 100)
@@ -456,7 +462,7 @@ local function CreateDropdown(parent, placeholder, refreshFunc)
     List.BackgroundColor3 = Color3.fromRGB(25, 25, 28)
     List.BorderSizePixel = 0
     List.Visible = false
-    List.ZIndex = 5
+    List.ZIndex = 10 -- FIX: Highest ZIndex for list
     List.ScrollBarThickness = 2
     Instance.new("UICorner", List).CornerRadius = UDim.new(0, 6)
     
@@ -473,7 +479,7 @@ local function CreateDropdown(parent, placeholder, refreshFunc)
             Item.TextColor3 = Color3.fromRGB(200, 200, 200)
             Item.Font = Enum.Font.Gotham
             Item.TextSize = 12
-            Item.ZIndex = 6
+            Item.ZIndex = 11
             Item.MouseButton1Click:Connect(function()
                 SelectedConfig = name
                 MainBtn.Text = name
@@ -514,7 +520,7 @@ CreateSlider(PhysLeft, "Reach Distance", "ReachDistance", 0, 15, function(v) if 
 CreateSlider(PhysLeft, "WalkSpeed", "WalkSpeed", 16, 50, function(v) end)
 
 local UpdateGuard = CreateToggle(PhysRight, "Auto Guard", "AutoGuard", function(v) end)
-CreateKeybind(PhysRight, "AutoGuardKey", "Keybind", function(k) end) -- Standard Keybind
+CreateKeybind(PhysRight, "AutoGuardKey", "Keybind", function(k) end) 
 CreateSlider(PhysRight, "Guard Delay", "GuardDelay", 0, 1, function(v) end)
 
 CreateToggle(PhysRight, "Auto Power", "AutoPower", function(v) end)
@@ -527,12 +533,29 @@ CreateButton(SettLeft, "Infinite Yield", function() loadstring(game:HttpGet('htt
 CreateButton(SettLeft, "Rejoin Server", function() game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer) end)
 
 CreateLabel(SettLeft, "Visuals & World")
-CreateToggle(SettLeft, "Show Hitboxes", "ShowHitboxes", function(v) end)
+CreateToggle(SettLeft, "Show Hitboxes", "ShowHitboxes", function(v)
+    if not v then
+        for _, p in pairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                for _, partName in pairs({"Jersey", "Hitbox", "HumanoidRootPart"}) do
+                    local part = p.Character:FindFirstChild(partName)
+                    if part then part.Transparency = 1 end
+                end
+            end
+        end
+    end
+end)
+CreateToggle(SettLeft, "Hitbox Expander (Self)", "HBEEnabled", function(v) end)
+CreateSlider(SettLeft, "HBE Size", "HBESize", 0, 10, function(v) end)
 CreateSlider(SettLeft, "World Time", "WorldTime", 0, 24, function(v) Lighting.ClockTime = v end)
 CreateSlider(SettLeft, "Brightness", "Brightness", 0, 10, function(v) Lighting.Brightness = v end)
 
+CreateLabel(SettRight, "Player Protection")
+CreateToggle(SettRight, "Anti-Knock", "AntiKnock", function(v) end)
+CreateToggle(SettRight, "Big Head All", "BigHead", function(v) end)
+CreateToggle(SettRight, "Trucking Mode (Hold F)", "TruckEnabled", function(v) end)
+
 CreateLabel(SettRight, "Menu Settings")
--- CHANGE: "Toggle UI" label added
 CreateKeybind(SettRight, "MenuKey", "Toggle UI", function(k) end)
 
 CreateLabel(SettRight, "Configuration")
@@ -583,12 +606,29 @@ UserInputService.InputBegan:Connect(function(input, gpe)
     if not gpe then
         if input.KeyCode == Settings.MenuKey then Main.Visible = not Main.Visible end
         if input.KeyCode == Settings.AutoGuardKey then UpdateGuard(not Settings.AutoGuard) end
+        if Settings.TruckEnabled and input.KeyCode == Enum.KeyCode.F then
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("Jersey") then
+                local evt = char.Jersey:FindFirstChild("Event")
+                if evt then evt:FireServer({[1] = "Truck"}) end
+            end
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input, gpe)
+    if Settings.TruckEnabled and input.KeyCode == Enum.KeyCode.F then
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChild("Jersey") then
+            local evt = char.Jersey:FindFirstChild("Event")
+            if evt then evt:FireServer({[1] = "StopTruck"}) end
+        end
     end
 end)
 
 LoadConfigsFromFile()
 
--- [[ LOGIC CORE (OPTIMIZED) ]] --
+-- [[ LOGIC CORE - STABILITY FIX ]] --
 local CachedHoops = {}
 local LastScanTime = 0
 local LastGuardUpdate = 0
@@ -596,7 +636,7 @@ local LockedPower = nil
 local CurrentTarget = nil 
 
 local function UpdateHoopCache()
-    if tick() - LastScanTime > 5 then
+    if tick() - LastScanTime > 2 then
         LastScanTime = tick()
         CachedHoops = {}
         for _, v in pairs(Workspace:GetDescendants()) do
@@ -621,6 +661,7 @@ local function GetClosestHoop()
     return closest
 end
 
+-- THREADED SCANNER
 task.spawn(function()
     while true do
         task.wait(0.1) 
@@ -663,23 +704,35 @@ local function SolveV104(hoop, char)
     return head.Position + (rawVec.Unit * 100), math.clamp(pwr, 20, 100)
 end
 
+-- STABLE SYNC (NO BOUNCE)
 local Syncing = false
 local function TurboSync(target)
     if Syncing then return end Syncing = true
     local char = LocalPlayer.Character
     local pVal = char and char:FindFirstChild("PowerValue")
-    if pVal then
-        local start = tick()
-        while math.abs(pVal.Value - target) >= 5 and (tick() - start) < 1 do
-            local key = (pVal.Value < target) and Enum.KeyCode.E or Enum.KeyCode.Q
-            VIM:SendKeyEvent(true, key, false, game)
-            task.wait(0.005)
-            VIM:SendKeyEvent(false, key, false, game)
-            task.wait(0.02)
-        end
+    local start = tick()
+    
+    -- Increase deadzone to 4 to stop fighting
+    while pVal and math.abs(pVal.Value - target) > 4 and (tick() - start) < 0.5 do 
+        local diff = target - pVal.Value
+        local key = (diff > 0) and Enum.KeyCode.E or Enum.KeyCode.Q
+        VIM:SendKeyEvent(true, key, false, game)
+        task.wait(0.1) -- SLOW TAP
+        VIM:SendKeyEvent(false, key, false, game)
     end
     Syncing = false
 end
+
+UserInputService.JumpRequest:Connect(function()
+    if Settings.AutoShoot or Settings.AutoPower then
+        local hoop = GetClosestHoop()
+        if hoop and LocalPlayer.Character then
+            local _, pwr = SolveV104(hoop, LocalPlayer.Character)
+            LockedPower = pwr
+            task.delay(1, function() LockedPower = nil end)
+        end
+    end
+end)
 
 RunService.Heartbeat:Connect(function()
     local char = LocalPlayer.Character
@@ -689,6 +742,7 @@ RunService.Heartbeat:Connect(function()
     
     if hum and Settings.WalkSpeed ~= 16 then hum.WalkSpeed = Settings.WalkSpeed end
 
+    -- Auto Guard
     if Settings.AutoGuard and root and hum then
         if tick() - LastGuardUpdate > Settings.GuardDelay then
             LastGuardUpdate = tick()
@@ -702,30 +756,56 @@ RunService.Heartbeat:Connect(function()
         end
     end
 
+    -- Hitbox Expander & Anti-Knock
+    if Settings.HBEEnabled then
+        for _, partName in pairs({"Hitbox", "Jersey", "UpperJersey", "LowerJersey"}) do
+            local part = char:FindFirstChild(partName)
+            if part then
+                part.Size = Vector3.new(Settings.HBESize, Settings.HBESize, Settings.HBESize)
+                part.CanCollide = false
+                part.Transparency = Settings.ShowHitboxes and 0.5 or 1
+            end
+        end
+    end
+    if Settings.AntiKnock then
+        local l, r = char:FindFirstChild("Left Arm"), char:FindFirstChild("Right Arm")
+        if l and r then l.Size = Vector3.new(1,2,1) r.Size = Vector3.new(1,2,1) end
+    end
+
+    -- Shooting
     local hoop = GetClosestHoop()
     if hoop then
         local aim, pwr
-        if hum and hum:GetState() == Enum.HumanoidStateType.Jumping then
-            if LockedPower then pwr = LockedPower; local r, _ = SolveV104(hoop, char); aim = r else aim, pwr = SolveV104(hoop, char) end
-        else
-            aim, pwr = SolveV104(hoop, char)
-            LockedPower = pwr
+        local state = hum:GetState()
+        local isAirborne = (state == Enum.HumanoidStateType.Jumping or state == Enum.HumanoidStateType.Freefall)
+        
+        -- Use Locked Power if Airborne
+        if isAirborne and LockedPower then 
+            pwr = LockedPower; 
+            local r, _ = SolveV104(hoop, char); 
+            aim = r 
+        else 
+            aim, pwr = SolveV104(hoop, char) 
         end
 
         if aim and pwr then
             if Settings.AutoPower and not _G.ShotCooldown then task.spawn(function() TurboSync(pwr) end) end
             if Settings.AutoShoot then
-                if hum and hum:GetState() == Enum.HumanoidStateType.Jumping and not _G.ShotCooldown then
-                    local tool = char:FindFirstChildOfClass("Tool")
-                    local pVal = char:FindFirstChild("PowerValue")
-                    if tool and tool:FindFirstChild("ShootEvent") and pVal then
-                        if math.abs(pVal.Value - pwr) < 5 then
-                            _G.ShotCooldown = true
-                            task.wait(Settings.JumpDelay)
-                            task.delay(0.8, function() _G.ShotCooldown = false LockedPower = nil end)
-                            local anim = tool:FindFirstChild("Animations") and tool.Animations:FindFirstChild("Shoot")
-                            if anim then hum:LoadAnimation(anim):Play() end
-                            tool.ShootEvent:FireServer(hum, aim)
+                local dist = (root.Position - hoop.Position).Magnitude
+                if dist > Settings.DunkDistance then 
+                    if isAirborne and not _G.ShotCooldown then
+                        local tool = char:FindFirstChildOfClass("Tool")
+                        local pVal = char:FindFirstChild("PowerValue")
+                        if tool and tool:FindFirstChild("ShootEvent") and pVal then
+                            -- Wait for stability (diff < 5)
+                            if math.abs(pVal.Value - pwr) < 5 then 
+                                _G.ShotCooldown = true
+                                task.wait(Settings.JumpDelay)
+                                task.delay(0.8, function() _G.ShotCooldown = false end)
+                                local anim = tool:FindFirstChild("Animations") and tool.Animations:FindFirstChild("Shoot")
+                                if anim then hum:LoadAnimation(anim):Play() end
+                                tool.ShootEvent:FireServer(hum, aim)
+                            end
                         end
                     end
                 end
@@ -734,15 +814,21 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+-- SLOW VISUALS LOOP
 task.spawn(function()
     while true do
-        task.wait(2)
+        task.wait(1)
         if Settings.ShowHitboxes then
             for _, p in pairs(Players:GetPlayers()) do
                 if p ~= LocalPlayer and p.Character then
                     for _, partName in pairs({"Jersey", "Hitbox", "HumanoidRootPart"}) do
                         local part = p.Character:FindFirstChild(partName)
                         if part then part.Transparency = 0.5 part.Color = Settings.AccentColor part.Material = Enum.Material.Neon end
+                    end
+                    if Settings.BigHead and p.Character:FindFirstChild("Head") then
+                        p.Character.Head.Size = Vector3.new(4, 4, 4)
+                        p.Character.Head.Transparency = 0.5
+                        p.Character.Head.CanCollide = false
                     end
                 end
             end
